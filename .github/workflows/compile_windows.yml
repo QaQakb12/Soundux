@@ -1,6 +1,7 @@
 on:
+  workflow_dispatch:
   push:
-    branches: [master]
+    branches: [master, custom-ui-025]
     paths-ignore:
       - "**/README.md"
       - "**/compile_linux.yml"
@@ -9,7 +10,7 @@ on:
       - "**/upload_full_src.yml"
       - "**/windows_debug.yml"
   pull_request:
-    branches: [master]
+    branches: [master, custom-ui-025]
 
 name: Build on Windows
 jobs:
