@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <fancy.hpp>
 #include <filesystem>
+#include <fstream>
 #include <helper/audio/linux/pulseaudio/pulseaudio.hpp>
 #include <helper/json/bindings.hpp>
 #include <helper/systeminfo/systeminfo.hpp>
@@ -88,6 +89,99 @@ namespace Soundux::Objects
             return false;
 #endif
         }));
+
+        // Call Flow layouts are stored separately from the main config so that this
+        // feature can evolve without changing the existing config.json schema.
+        webview->expose(Webview::Function("getCallFlowLayouts", []() -> std::string {
+            try
+            {
+                const auto layoutPath = std::filesystem::path(Config::path).parent_path() / "call-flow-layouts.json";
+                if (!std::filesystem::exists(layoutPath))
+                {
+                    return "{}";
+                }
+
+                std::ifstream input(layoutPath, std::ios::binary);
+                if (!input)
+                {
+                    return "{}";
+                }
+
+                std::string content((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+                const auto parsed = nlohmann::json::parse(content, nullptr, false);
+                if (parsed.is_discarded() || !parsed.is_object())
+                {
+                    return "{}";
+                }
+                return parsed.dump();
+            }
+            catch (const std::exception &error)
+            {
+                Fancy::fancy.logTime().warning() << "Failed to read Call Flow layouts: " << error.what() << std::endl;
+                return "{}";
+            }
+        }));
+
+        webview->expose(Webview::Function("saveCallFlowLayouts", [](const std::string &content) -> bool {
+            try
+            {
+                if (content.size() > 4 * 1024 * 1024)
+                {
+                    return false;
+                }
+
+                const auto parsed = nlohmann::json::parse(content, nullptr, false);
+                if (parsed.is_discarded() || !parsed.is_object())
+                {
+                    return false;
+                }
+
+                const auto layoutPath = std::filesystem::path(Config::path).parent_path() / "call-flow-layouts.json";
+                std::filesystem::create_directories(layoutPath.parent_path());
+                auto temporaryPath = layoutPath;
+                temporaryPath += ".tmp";
+
+                {
+                    std::ofstream output(temporaryPath, std::ios::binary | std::ios::trunc);
+                    if (!output)
+                    {
+                        return false;
+                    }
+                    output << parsed.dump();
+                    output.flush();
+                    if (!output)
+                    {
+                        return false;
+                    }
+                }
+
+                std::error_code error;
+                std::filesystem::rename(temporaryPath, layoutPath, error);
+                if (error)
+                {
+                    std::error_code removeError;
+                    std::filesystem::remove(layoutPath, removeError);
+                    error.clear();
+                    std::filesystem::rename(temporaryPath, layoutPath, error);
+                }
+
+                if (error)
+                {
+                    std::error_code cleanupError;
+                    std::filesystem::remove(temporaryPath, cleanupError);
+                    Fancy::fancy.logTime().failure() << "Failed to save Call Flow layouts: " << error.message()
+                                                     << std::endl;
+                    return false;
+                }
+                return true;
+            }
+            catch (const std::exception &error)
+            {
+                Fancy::fancy.logTime().failure() << "Failed to save Call Flow layouts: " << error.what() << std::endl;
+                return false;
+            }
+        }));
+
         webview->expose(Webview::Function("addTab", [this]() { return (addTab()); }));
         webview->expose(Webview::Function("getTabs", []() { return Globals::gData.getTabs(); }));
         webview->expose(Webview::Function("playSound", [this](std::uint32_t id) { return playSound(id); }));
