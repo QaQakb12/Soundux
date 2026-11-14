@@ -68,6 +68,14 @@ if (UNIX)
 endif()
 if (WIN32)
     target_compile_definitions(soundux PRIVATE _CRT_SECURE_NO_WARNINGS=1 _SILENCE_ALL_CXX17_DEPRECATION_WARNINGS=1 _UNICODE=1)
+
+    # TinyProcessLib's Windows API uses std::string unless UNICODE is defined.
+    # These Soundux 0.2.5 call sites pass std::string commands, so match that API.
+    set_source_files_properties(
+        src/helper/misc/misc.cpp
+        src/helper/ytdl/youtube-dl.cpp
+        PROPERTIES COMPILE_OPTIONS "/UUNICODE"
+    )
 endif()
 
 add_subdirectory(src/ui/impl/webview/lib/webviewpp EXCLUDE_FROM_ALL)
